@@ -11,7 +11,6 @@ from PyQt5 import QtCore, QtGui, QtWidgets, uic
 from geometry import geodetic_to_ecef
 
 
-
 class Scene(QtWidgets.QGraphicsScene):
     image_points_updated = QtCore.pyqtSignal(object)
 
@@ -58,11 +57,6 @@ class CamTrak(QtWidgets.QMainWindow):
         self.solve_pnp_btn.clicked.connect(self.solve_pnp)
         self.action_save_parameters.triggered.connect(self.on_save_parameters)
         self.action_load_parameters.triggered.connect(self.on_load_parameters)
-
-    #def init_worker(self, camera):
-    #    worker = MultiThreadedGrabber(camera)
-    #    worker.new_image.connect(self.update_frame)
-    #    self.threadpool.start(worker)
 
     def load_previous_session(self):
         path = './previous_session.json'
@@ -179,7 +173,6 @@ class CamTrak(QtWidgets.QMainWindow):
             # Remove the point if it exists.
             del self.known_image_points[ind]
             self.known_geo_points_tbl.removeRow(ind)
-            print('Removed row')
         else:
             # Or add the point.
             self.known_image_points.append(point)
@@ -187,9 +180,7 @@ class CamTrak(QtWidgets.QMainWindow):
             # Update the table.
             row_pos = self.known_geo_points_tbl.rowCount()
             self.known_geo_points_tbl.insertRow(row_pos)
-            #self.known_geo_points_tbl.setItem(row_pos, 1, QtWidgets.QTableWidgetItem(row_pos))
 
-            print('row_pos: ', row_pos)
             if latlonalt:
                 print('setting latlonalt')
                 self.known_geo_points_tbl.setItem(
@@ -198,7 +189,6 @@ class CamTrak(QtWidgets.QMainWindow):
                     row_pos, 1, QtWidgets.QTableWidgetItem(str(latlonalt[1])))
                 self.known_geo_points_tbl.setItem(
                     row_pos, 2, QtWidgets.QTableWidgetItem(str(latlonalt[2])))
-
 
         # Maybe this should be the very last thing.
         self.draw_known_points()
@@ -216,8 +206,6 @@ class CamTrak(QtWidgets.QMainWindow):
         self.timer.start()
         if self.camera is None:
             self.capture = cv2.VideoCapture(0)
-            #self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-            #self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.timer.start()
 
     @QtCore.pyqtSlot()
@@ -259,7 +247,6 @@ class CamTrak(QtWidgets.QMainWindow):
         if window:
             self.gview.setTransform(QtGui.QTransform().scale(self.zoom, self.zoom))
             self.scene.addPixmap(QtGui.QPixmap.fromImage(out_img))
-            #self.gview.fitInView(QtCore.QRectF(0, 0, w, h), QtCore.Qt.KeepAspectRatio)
 
     def get_object_points(self):
         obj_points = []
@@ -370,6 +357,5 @@ if __name__=='__main__':
     app = QtWidgets.QApplication(sys.argv)
     cap = cv2.VideoCapture(0)
     window = CamTrak(cap)
-    #window.setWindowTitle('main code')
     window.show()
     sys.exit(app.exec_())
