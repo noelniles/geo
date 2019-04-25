@@ -16,13 +16,53 @@ class Scene(QtWidgets.QGraphicsScene):
 
     def __init__(self, parent=None):
         super(Scene, self).__init__()
+        self.mode = 'pnp'
 
     def mouseDoubleClickEvent(self, ev):
         x = ev.scenePos().x()
         y = ev.scenePos().y()
         self.image_points_updated.emit((x, y))
 
+class Tracker:
+    def __init__(self):
+        self.t = cv2.TrackerCSRT_create()
+        self.roi = (0, 0, 0, 0)
+        self.initialized = False
+        self.fgbg = cv2.createBackgroundSubtractorKNN() 
 
+        self.prepped_image = None
+
+    def prep(self, img):
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        blur = cv2.bilateralFilter(gray, 9, 75, 75)
+        thresh = cv2.threshold(blur, 200, 255, cv2.THRESH_BINARY)[1]
+        thresh = cv2.erode(thresh, None, iterations=2)
+        thresh = cv2.dilate(thresh, None, iterations=4)
+
+        fgmask = self.fgbg.apply(img, 0.9)
+        fgmask = cv2.morphologyEx(fgmask, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+        self.prepped_image = cv2.cvtColor(fgmask, cv2.COLOR_GRAY2RGB)
+        return fgmask
+
+    def initialize(self, image, roi):
+        image = self.prep(image)
+        ok = self.t.init(image, roi)
+
+        if not ok:
+            print('problem intializing tracker')
+
+        self.initialized = True
+
+    def update(self, image):
+        image = self.prep(image)
+        ok, self.roi = self.t.update(image)
+
+        if not ok:
+            print('no luck tracking')
+        return self.roi
+        
 class CamTrak(QtWidgets.QMainWindow):
 
     def __init__(self, cap):
@@ -32,7 +72,10 @@ class CamTrak(QtWidgets.QMainWindow):
         self.camera = cap
         self.scene = Scene(self.gview)
         self.gview.setScene(self.scene)
-        self.npimage = None
+        self.mask_scene = Scene(self.mask_view)
+        self.mask_view.setScene(self.mask_scene)
+        self.altered_image = None
+        self.original_image = None
         self.connect_signals()
         self.timer = QtCore.QTimer(self, interval=0.1)
         self.timer.timeout.connect(self.update_frame)
@@ -53,6 +96,8 @@ class CamTrak(QtWidgets.QMainWindow):
 
         # Different modes.
         self.tracking = False
+        self.tracker = Tracker()
+        self.current_tracked_point = (0, 0)
 
     def on_tracking_mode(self):
         self.tracking = not self.tracking
@@ -155,7 +200,7 @@ class CamTrak(QtWidgets.QMainWindow):
 
 
     def in_circle(self, point):
-        """There's some kind of bud in here."""
+        """There's some kind of bug in here."""
         x, y = point
         r = 5
         index = -1
@@ -175,9 +220,12 @@ class CamTrak(QtWidgets.QMainWindow):
 
         return index, False
 
-    def add_known_image_points(self, point, latlonalt=None):
-        ind, exists = self.inside_circle(point)
+    def add_tracking_point(self, point):
+        self.current_tracked_point = point
 
+    def add_pnp_point(self, point, latlonalt):
+        ind, exists = self.inside_circle(point)
+            
         if exists:
             # Remove the point if it exists.
             del self.known_image_points[ind]
@@ -198,16 +246,44 @@ class CamTrak(QtWidgets.QMainWindow):
                 self.known_geo_points_tbl.setItem(
                     row_pos, 2, QtWidgets.QTableWidgetItem(str(latlonalt[2])))
 
-        # Maybe this should be the very last thing.
+    def add_known_image_points(self, point, latlonalt=None):
+        """Callback function that is called when the scene is clicked."""
+        if self.tracking:
+            self.add_tracking_point(point)
+        else:
+            self.add_pnp_point(point, latlonalt)
+
+        # Finally, draw the points.
         self.draw_known_points()
 
     def draw_known_points(self):
-        for p in self.known_image_points:
+        if self.tracking:
+            p = self.current_tracked_point
             x = int(p[0])
             y = int(p[1])
+            cv2.circle(self.altered_image, (x, y), 10, (0, 0, 255), 1, cv2.LINE_AA)
+        else:
+            for p in self.known_image_points:
+                x = int(p[0])
+                y = int(p[1])
 
-            cv2.circle(self.npimage, (x, y), 5, (0, 0, 255), 1, cv2.LINE_AA)
-            cv2.putText(self.npimage, f'x:{x} y:{y}', (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1/8, (0, 0, 255))
+                cv2.circle(self.altered_image, (x, y), 5, (0, 0, 255), 1, cv2.LINE_AA)
+                cv2.putText(self.altered_image, f'x:{x} y:{y}', (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1/8, (0, 0, 255))
+
+    def update_frame_tracking(self):
+        if not self.current_tracked_point:
+            return
+
+        if not self.tracker.initialized:
+            x, y = self.current_tracked_point
+            roi = (x, y, 50, 50)
+            self.tracker.initialize(self.original_image, roi)
+            return
+
+        self.roi = self.tracker.update(self.original_image)
+        x, y, w, h = self.roi
+
+        cv2.circle(self.altered_image, (int(x), int(y)), 5, (0, 0, 255), 1, cv2.LINE_AA)
 
     @QtCore.pyqtSlot()
     def start_webcam(self):
@@ -219,16 +295,21 @@ class CamTrak(QtWidgets.QMainWindow):
     @QtCore.pyqtSlot()
     def update_frame(self):
         ret, image = self.camera.read()
-        print(image.shape)
-        self.npimage = image
-        image = cv2.flip(self.npimage, 1)
-        self.display_image(True)
+        self.original_image = image
+        self.altered_image = image.copy()
+
+        if self.tracking:
+            self.update_frame_tracking()
+            self.display_image(True)
+        else:
+            image = cv2.flip(self.altered_image, 1)
+            self.display_image(True)
 
     @QtCore.pyqtSlot()
     def capture_image(self):
-        flag, frame= self.capture.read()
+        ok, img = self.capture.read()
         path = '~/data/'
-        if flag:
+        if ok:
             QtWidgets.QApplication.beep()
             name = "opencv_frame_{}.png".format(self._image_counter) 
             cv2.imwrite(os.path.join(path, name), frame)
@@ -236,7 +317,7 @@ class CamTrak(QtWidgets.QMainWindow):
 
     def display_image(self, window=True):
         qformat = QtGui.QImage.Format_Indexed8
-        img = self.npimage
+        img = self.altered_image
 
         if len(img.shape) == 3 :
             if img.shape[2] == 4:
@@ -246,8 +327,7 @@ class CamTrak(QtWidgets.QMainWindow):
 
         w, h = img.shape[:2]
 
-        if self.known_image_points and not self.tracking_mode:
-            self.draw_known_points()
+        self.draw_known_points()
 
         out_img = QtGui.QImage(img, h, w, img.strides[0], qformat)
         out_img = out_img.rgbSwapped()
@@ -256,15 +336,20 @@ class CamTrak(QtWidgets.QMainWindow):
             self.gview.setTransform(QtGui.QTransform().scale(self.zoom, self.zoom))
             self.scene.addPixmap(QtGui.QPixmap.fromImage(out_img))
 
+            if self.tracking:
+                mask = self.tracker.prepped_image
+                qmask = QtGui.QImage(mask, h, w, mask.strides[0], qformat)
+                qmask = qmask.rgbSwapped()
+                self.mask_view.setTransform(QtGui.QTransform().scale(self.zoom, self.zoom))
+                self.mask_scene.addPixmap(QtGui.QPixmap.fromImage(qmask))
+
     def get_object_points(self):
         obj_points = []
 
         print('row count: ', self.known_geo_points_tbl.rowCount())
         for i in range(self.known_geo_points_tbl.rowCount()):
-            print('on row ', i)
             lat = float(self.known_geo_points_tbl.item(i, 0).text())
             lon = float(self.known_geo_points_tbl.item(i, 1).text())
-            print('**', lat, lon)
             alt = float(self.known_geo_points_tbl.item(i, 2).text())
             x, y = self.known_image_points[i]
 
@@ -323,7 +408,7 @@ class CamTrak(QtWidgets.QMainWindow):
     
     def solve_pnp(self):
         # FAKE camera matrix
-        h, w = self.npimage.shape[:2]
+        h, w = self.original_image.shape[:2]
         focal_length = 1
         cx, cy = (w//2, h//2)
         dist_coeffs = np.zeros((4,1))
@@ -382,10 +467,10 @@ class CamTrak(QtWidgets.QMainWindow):
         if self.param_file:
             session.update({'param file': self.param_file})
 
-        with open('previous_session.json', 'w') as f:
-            json.dump(session, f)
+            with open('previous_session.json', 'w') as f:
+                json.dump(session, f)
 
-        print('Saved session to previous_session.json')
+            print('Saved session to previous_session.json')
 
 if __name__=='__main__':
     import sys

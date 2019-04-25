@@ -21,6 +21,34 @@
     <property name="verticalSpacing">
      <number>0</number>
     </property>
+    <item row="3" column="4">
+     <widget class="QPushButton" name="capture_btn">
+      <property name="text">
+       <string>Capture</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="3">
+     <widget class="QPushButton" name="calibrate_btn">
+      <property name="text">
+       <string>Calibrate</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="1">
+     <widget class="QPushButton" name="view_btn">
+      <property name="text">
+       <string>View</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="2">
+     <widget class="QPushButton" name="solve_pnp_btn">
+      <property name="text">
+       <string>Solve PnP</string>
+      </property>
+     </widget>
+    </item>
     <item row="0" column="0">
      <widget class="QGroupBox" name="groupBox">
       <property name="title">
@@ -31,8 +59,8 @@
         <rect>
          <x>10</x>
          <y>30</y>
-         <width>321</width>
-         <height>161</height>
+         <width>221</width>
+         <height>201</height>
         </rect>
        </property>
        <property name="sizePolicy">
@@ -42,13 +70,6 @@
         </sizepolicy>
        </property>
       </widget>
-     </widget>
-    </item>
-    <item row="0" column="1" rowspan="3" colspan="4">
-     <widget class="QGraphicsView" name="gview">
-      <property name="sizeAdjustPolicy">
-       <enum>QAbstractScrollArea::AdjustToContents</enum>
-      </property>
      </widget>
     </item>
     <item row="1" column="0">
@@ -271,7 +292,7 @@
       </widget>
      </widget>
     </item>
-    <item row="2" column="0" rowspan="2">
+    <item row="2" column="0">
      <widget class="QGroupBox" name="groupBox_3">
       <property name="title">
        <string>Distortion Coeeficients</string>
@@ -402,32 +423,44 @@
       </widget>
      </widget>
     </item>
-    <item row="3" column="1">
-     <widget class="QPushButton" name="view_btn">
-      <property name="text">
-       <string>View</string>
+    <item row="0" column="1" rowspan="3" colspan="4">
+     <widget class="QTabWidget" name="view_tab_window">
+      <property name="currentIndex">
+       <number>1</number>
       </property>
-     </widget>
-    </item>
-    <item row="3" column="2">
-     <widget class="QPushButton" name="solve_pnp_btn">
-      <property name="text">
-       <string>Solve PnP</string>
+      <property name="movable">
+       <bool>true</bool>
       </property>
-     </widget>
-    </item>
-    <item row="3" column="3">
-     <widget class="QPushButton" name="calibrate_btn">
-      <property name="text">
-       <string>Calibrate</string>
-      </property>
-     </widget>
-    </item>
-    <item row="3" column="4">
-     <widget class="QPushButton" name="capture_btn">
-      <property name="text">
-       <string>Capture</string>
-      </property>
+      <widget class="QWidget" name="view_tab">
+       <attribute name="title">
+        <string>view</string>
+       </attribute>
+       <widget class="QGraphicsView" name="gview">
+        <property name="geometry">
+         <rect>
+          <x>0</x>
+          <y>0</y>
+          <width>971</width>
+          <height>671</height>
+         </rect>
+        </property>
+       </widget>
+      </widget>
+      <widget class="QWidget" name="mask_tab">
+       <attribute name="title">
+        <string>mask</string>
+       </attribute>
+       <widget class="QGraphicsView" name="mask_view">
+        <property name="geometry">
+         <rect>
+          <x>-5</x>
+          <y>1</y>
+          <width>981</width>
+          <height>701</height>
+         </rect>
+        </property>
+       </widget>
+      </widget>
      </widget>
     </item>
    </layout>
