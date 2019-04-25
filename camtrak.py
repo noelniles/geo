@@ -4,8 +4,11 @@ import os
 import cv2
 import json
 from functools import partial
+
 import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets, uic
+
+from geometry import geodetic_to_ecef
 
 
 
@@ -15,7 +18,7 @@ class Scene(QtWidgets.QGraphicsScene):
     def __init__(self, parent=None):
         super(Scene, self).__init__()
 
-    def mousePressEvent(self, ev):
+    def mouseDoubleClickEvent(self, ev):
         x = ev.scenePos().x()
         y = ev.scenePos().y()
         self.image_points_updated.emit((x, y))
@@ -292,6 +295,8 @@ class CamTrak(QtWidgets.QMainWindow):
         phi = float(self.phi_line.text())
         theta = float(self.theta_line.text())
         psi = float(self.psi_line.text())
+
+        print('camera ecef position ', geodetic_to_ecef(lon, lat, alt))
 
         cam_pos = {
             'lat': lat,
