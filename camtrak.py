@@ -24,12 +24,12 @@ class Scene(QtWidgets.QGraphicsScene):
 
 
 class CamTrak(QtWidgets.QMainWindow):
+
     def __init__(self, cap):
         super(CamTrak, self).__init__()
         uic.loadUi('./gui/camtrak.ui',self)
-        self.camera = cap
-        self.view_btn.clicked.connect(self.start_webcam)
 
+        self.camera = cap
         self.scene = Scene(self.gview)
         self.gview.setScene(self.scene)
         self.npimage = None
@@ -51,12 +51,21 @@ class CamTrak(QtWidgets.QMainWindow):
         # Load the last session.
         self.load_previous_session()
 
+        # Different modes.
+        self.tracking = False
+
+    def on_tracking_mode(self):
+        self.tracking = not self.tracking
+        print('TRACKINNNNNN', self.tracking)
+
     def connect_signals(self):
+        self.view_btn.clicked.connect(self.start_webcam)
         self.capture_btn.clicked.connect(self.capture_image)
         self.scene.image_points_updated.connect(self.add_known_image_points)
         self.solve_pnp_btn.clicked.connect(self.solve_pnp)
         self.action_save_parameters.triggered.connect(self.on_save_parameters)
         self.action_load_parameters.triggered.connect(self.on_load_parameters)
+        self.action_track.triggered.connect(self.on_tracking_mode)
 
     def load_previous_session(self):
         path = './previous_session.json'
@@ -182,7 +191,6 @@ class CamTrak(QtWidgets.QMainWindow):
             self.known_geo_points_tbl.insertRow(row_pos)
 
             if latlonalt:
-                print('setting latlonalt')
                 self.known_geo_points_tbl.setItem(
                     row_pos, 0, QtWidgets.QTableWidgetItem(str(latlonalt[0])))
                 self.known_geo_points_tbl.setItem(
@@ -314,10 +322,37 @@ class CamTrak(QtWidgets.QMainWindow):
         return d
     
     def solve_pnp(self):
+        # FAKE camera matrix
+        h, w = self.npimage.shape[:2]
+        focal_length = 1
+        cx, cy = (w//2, h//2)
+        dist_coeffs = np.zeros((4,1))
+        cam_mat = np.array(
+            [
+                [focal_length, 0, cx],
+                [0, focal_length, cy],
+                [0, 0, 1]
+            ],
+            dtype="double"
+
+        )
+        dist_coeffs = np.zeros((4,1))
+
         # First get the 3D model points.
+        llas = []
         obj_points = self.get_object_points()
 
+        for p in obj_points:
+            llas.append(np.array([p['lat'], p['lon'], p['alt']]))
+        
+        # Now get the 2d image points.
+        img_points = self.known_image_points
         print(obj_points)
+        print(img_points)
+
+        sol = cv2.solvePnP(np.array(llas), np.asarray(img_points, 'float32'), cam_mat, dist_coeffs)
+
+        print(sol)
 
     def zoom_in(self):
         self.zoom *= 1.05
