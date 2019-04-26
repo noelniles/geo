@@ -1,4 +1,5 @@
 #! /usr/bin/env python
+import argparse
 import hashlib
 import os
 import cv2
@@ -9,6 +10,7 @@ import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets, uic
 
 from geometry import geodetic_to_ecef
+from cameras import Basler
 
 
 class Scene(QtWidgets.QGraphicsScene):
@@ -28,7 +30,7 @@ class Tracker:
         self.t = cv2.TrackerCSRT_create()
         self.roi = (0, 0, 0, 0)
         self.initialized = False
-        self.fgbg = cv2.createBackgroundSubtractorKNN() 
+        self.fgbg = cv2.createBackgroundSubtractorMOG2() 
 
         self.prepped_image = None
 
@@ -44,7 +46,7 @@ class Tracker:
         fgmask = cv2.morphologyEx(fgmask, cv2.MORPH_CLOSE, kernel, iterations=2)
 
         self.prepped_image = cv2.cvtColor(fgmask, cv2.COLOR_GRAY2RGB)
-        return fgmask
+        return blur
 
     def initialize(self, image, roi):
         image = self.prep(image)
@@ -97,11 +99,15 @@ class CamTrak(QtWidgets.QMainWindow):
         # Different modes.
         self.tracking = False
         self.tracker = Tracker()
-        self.current_tracked_point = (0, 0)
+        self.current_tracked_point = None
+
+        # OS stuff
+        self.home = os.path.expanduser('~')
 
     def on_tracking_mode(self):
         self.tracking = not self.tracking
-        print('TRACKINNNNNN', self.tracking)
+        msg = 'Tracking Mode' if self.tracking else ''
+        self.statusBar().showMessage(msg)
 
     def connect_signals(self):
         self.view_btn.clicked.connect(self.start_webcam)
@@ -111,6 +117,7 @@ class CamTrak(QtWidgets.QMainWindow):
         self.action_save_parameters.triggered.connect(self.on_save_parameters)
         self.action_load_parameters.triggered.connect(self.on_load_parameters)
         self.action_track.triggered.connect(self.on_tracking_mode)
+        self.action_open_image.triggered.connect(self.on_open_image)
 
     def load_previous_session(self):
         path = './previous_session.json'
@@ -122,6 +129,14 @@ class CamTrak(QtWidgets.QMainWindow):
             prev_session_param_file = prev_session['param file']
 
             self.on_load_parameters(prev_session_param_file)
+
+    def on_open_image(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(None, "Choose an image.", self.home, "Images (*.bmp *BMP *.jpg *.JPG *.png *.PNG *.tif *.tiff *.TIF *.TIFF *.fts *.FTS *.fits *.FITS)")
+
+        self.original_image = cv2.imread(path)
+        self.altered_image = self.original_image.copy()
+        print(self.altered_image.shape)
+        self.display_image()
 
     def on_save_parameters(self):
         obj_points = self.get_object_points()
@@ -198,28 +213,6 @@ class CamTrak(QtWidgets.QMainWindow):
             
         return index, False
 
-
-    def in_circle(self, point):
-        """There's some kind of bug in here."""
-        x, y = point
-        r = 5
-        index = -1
-
-        for i, p in enumerate(self.known_image_points):
-            cx, cy = p
-            dx, dy = abs(x - cx), abs(y - cy)
-
-            if dx > r or dy > r:
-                return i, False
-            if dx + dy <= r:
-                return i, True
-            if dx**2 + dy**2 <= r**2:
-                return i, True
-            else:
-                return i, False
-
-        return index, False
-
     def add_tracking_point(self, point):
         self.current_tracked_point = point
 
@@ -258,10 +251,14 @@ class CamTrak(QtWidgets.QMainWindow):
 
     def draw_known_points(self):
         if self.tracking:
+            if self.current_tracked_point == None:
+                return
             p = self.current_tracked_point
             x = int(p[0])
             y = int(p[1])
             cv2.circle(self.altered_image, (x, y), 10, (0, 0, 255), 1, cv2.LINE_AA)
+            cv2.putText(self.altered_image, f'az:{x} alt:{y}', (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1/8, (0, 0, 255))
+            self.statusBar().showMessage(f'az: {x} alt: {y}')
         else:
             for p in self.known_image_points:
                 x = int(p[0])
@@ -283,7 +280,8 @@ class CamTrak(QtWidgets.QMainWindow):
         self.roi = self.tracker.update(self.original_image)
         x, y, w, h = self.roi
 
-        cv2.circle(self.altered_image, (int(x), int(y)), 5, (0, 0, 255), 1, cv2.LINE_AA)
+        cv2.circle(self.altered_image, (int(x), int(y)), 10, (0, 0, 255), 1, cv2.LINE_AA)
+        cv2.putText(self.altered_image, f'az:{x} alt:{y}', (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1/8, (0, 0, 255))
 
     @QtCore.pyqtSlot()
     def start_webcam(self):
@@ -307,13 +305,15 @@ class CamTrak(QtWidgets.QMainWindow):
 
     @QtCore.pyqtSlot()
     def capture_image(self):
-        ok, img = self.capture.read()
-        path = '~/data/'
-        if ok:
-            QtWidgets.QApplication.beep()
-            name = "opencv_frame_{}.png".format(self._image_counter) 
-            cv2.imwrite(os.path.join(path, name), frame)
-            self._image_counter += 1
+        img = self.original_image
+        path = os.path.join(self.home, 'data')
+        name = "camtrak_frame_{}.png".format(self._image_counter) 
+        fn = os.path.join(path, name)
+        cv2.imwrite(fn, img)
+
+        QtWidgets.QApplication.beep()
+        self.statusBar().showMessage(f'Saved image to {fn}')
+        self._image_counter += 1
 
     def display_image(self, window=True):
         qformat = QtGui.QImage.Format_Indexed8
@@ -337,6 +337,11 @@ class CamTrak(QtWidgets.QMainWindow):
             self.scene.addPixmap(QtGui.QPixmap.fromImage(out_img))
 
             if self.tracking:
+                # This is to show the image mask after the preparation that is
+                # done inside the tracker. But the tracker might not have an 
+                # image yet so we need to wait until it does. 
+                if not self.current_tracked_point:
+                    return
                 mask = self.tracker.prepped_image
                 qmask = QtGui.QImage(mask, h, w, mask.strides[0], qformat)
                 qmask = qmask.rgbSwapped()
@@ -347,7 +352,7 @@ class CamTrak(QtWidgets.QMainWindow):
         obj_points = []
 
         print('row count: ', self.known_geo_points_tbl.rowCount())
-        for i in range(self.known_geo_points_tbl.rowCount()):
+        for i in range(1, self.known_geo_points_tbl.rowCount()):
             lat = float(self.known_geo_points_tbl.item(i, 0).text())
             lon = float(self.known_geo_points_tbl.item(i, 1).text())
             alt = float(self.known_geo_points_tbl.item(i, 2).text())
@@ -364,7 +369,6 @@ class CamTrak(QtWidgets.QMainWindow):
             obj_points.append(pos)
 
         return obj_points
-
 
     def get_camera_position(self):
         lat = float(self.camera_lat_line.text())
@@ -472,10 +476,21 @@ class CamTrak(QtWidgets.QMainWindow):
 
             print('Saved session to previous_session.json')
 
+def cli():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('-camera', choices=['webcam', 'basler', 'flir'], default='webcam')
+
+    return ap.parse_args()
+
 if __name__=='__main__':
     import sys
+    args = cli()
     app = QtWidgets.QApplication(sys.argv)
-    cap = cv2.VideoCapture(0)
+    if args.camera == 'basler':
+        cap = Basler()
+    else:
+        cap = cv2.VideoCapture(0)
+
     window = CamTrak(cap)
     window.show()
     sys.exit(app.exec_())
