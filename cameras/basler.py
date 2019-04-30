@@ -39,9 +39,8 @@ class Basler(QObject):
                 image = self.converter.Convert(grabResult)
                 npimage = image.GetArray()
                 
-                if not self.image_queue.full():
-                    self.image_queue.put(npimage)
-                    self.queue_updated.emit()
+                self.image_queue.append(npimage)
+                self.queue_updated.emit()
 
 
     def close():

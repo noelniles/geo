@@ -27,9 +27,8 @@ class CVWebcam(QObject):
             ok, img = self.camera.read()
 
             if ok:
-                if not self.image_queue.full():
-                    self.image_queue.put(img)
-                    self.queue_updated.emit()
+                self.image_queue.apppend(img)
+                self.queue_updated.emit()
 
 
     def close():

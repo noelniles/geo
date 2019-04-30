@@ -21,34 +21,6 @@
     <property name="verticalSpacing">
      <number>0</number>
     </property>
-    <item row="3" column="4">
-     <widget class="QPushButton" name="capture_btn">
-      <property name="text">
-       <string>Capture</string>
-      </property>
-     </widget>
-    </item>
-    <item row="3" column="3">
-     <widget class="QPushButton" name="calibrate_btn">
-      <property name="text">
-       <string>Calibrate</string>
-      </property>
-     </widget>
-    </item>
-    <item row="3" column="1">
-     <widget class="QPushButton" name="view_btn">
-      <property name="text">
-       <string>View</string>
-      </property>
-     </widget>
-    </item>
-    <item row="3" column="2">
-     <widget class="QPushButton" name="solve_pnp_btn">
-      <property name="text">
-       <string>Solve PnP</string>
-      </property>
-     </widget>
-    </item>
     <item row="0" column="0">
      <widget class="QGroupBox" name="groupBox">
       <property name="title">
@@ -423,7 +395,7 @@
       </widget>
      </widget>
     </item>
-    <item row="0" column="1" rowspan="3" colspan="4">
+    <item row="0" column="1" rowspan="3" colspan="3">
      <widget class="QTabWidget" name="view_tab_window">
       <property name="currentIndex">
        <number>0</number>
@@ -488,6 +460,20 @@
         <string>TIFF</string>
        </property>
       </item>
+     </widget>
+    </item>
+    <item row="3" column="3">
+     <widget class="QPushButton" name="solve_pnp_btn">
+      <property name="text">
+       <string>Solve PnP</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="2">
+     <widget class="QPushButton" name="capture_btn">
+      <property name="text">
+       <string>Capture</string>
+      </property>
      </widget>
     </item>
    </layout>

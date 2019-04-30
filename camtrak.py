@@ -6,7 +6,8 @@ import cv2
 from datetime import datetime
 import json
 from functools import partial
-from queue import Queue
+#from queue import Queue
+from collections import deque
 
 import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets, uic
@@ -27,7 +28,7 @@ class CamTrak(QtWidgets.QMainWindow):
         uic.loadUi('./gui/camtrak.ui',self)
         self.setWindowIcon(QtGui.QIcon('./assets/icons/radar_icon.png'))
 
-        self.image_queue = Queue()
+        self.image_queue = deque(maxlen=16)
         self.scene = ClickableScene(self.gview)
         self.gview.setScene(self.scene)
         self.mask_scene = ClickableScene(self.mask_view)
@@ -84,7 +85,6 @@ class CamTrak(QtWidgets.QMainWindow):
         self.statusBar().showMessage(msg)
 
     def connect_signals(self):
-        #self.view_btn.clicked.connect(self.start_webcam)
         self.capture_btn.clicked.connect(self.capture_image)
         self.scene.image_points_updated.connect(self.add_known_image_points)
         self.solve_pnp_btn.clicked.connect(self.solve_pnp)
@@ -278,7 +278,8 @@ class CamTrak(QtWidgets.QMainWindow):
     @QtCore.pyqtSlot()
     def update_frame(self):
         """This is the slot that actaully reads an image from the camera."""
-        image = self.image_queue.get()
+        image = self.image_queue.pop()
+        self.image_queue.rotate(-1)
         self.original_image = image
         self.altered_image = image.copy()
 
@@ -311,6 +312,16 @@ class CamTrak(QtWidgets.QMainWindow):
     def user_create_fits_header(self):
         pass
 
+    def get_fits_metadata(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Choose a FITS header file.",
+            "",
+            "JSON Files (*.json)",
+            options=QtWidgets.QFileDialog.DontUseNativeDialog)
+
+        return path
+
     def save_fits(self):
         hdu = fits.PrimaryHDU()
 
@@ -319,24 +330,35 @@ class CamTrak(QtWidgets.QMainWindow):
 
         if not self.metadata_filename:
             # Let the user choose a JSON file containing fits header.
-            self.metadata_filename, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Choose a FITS header file.", "", "JSON Files (*.json)")
-            self.user_create_fits_header()
+            self.metadata_filename = self.get_fits_metadata()
+
+            if self.metadata_filename == None:
+                # The user didn't select a file so they must create one.
+                self.metadata_filename = self.user_create_fits_header()
             
         if self.metadata_filename:
             # A metadata file exists so load it into a dict that will become the header.
             with open(self.metadata_filename, 'r') as f:
                 d = json.load(f)
 
-        if not self.save_directory:
-            self.save_directory, _ = QtWidgets.QFileDialog.getExistingDirectory(self, "Select a directory")
+            for k, v in d.items():
+                hdr[k] = v
 
+        if not self.save_directory:
+            self.save_directory = QtWidgets.QFileDialog.getExistingDirectory(
+                self,
+                "Select a directory",
+                options=QtWidgets.QFileDialog.DontUseNativeDialog
+            )
 
         directory = os.path.join(self.save_directory, self.starting_time)
+
         if not os.path.exists(directory):
             os.makedirs(directory)
 
-        path = os.path.join(directory, f'{self.image_counter}.fits')
+        path = os.path.join(directory, f'{self._image_counter}.fits')
         hdu.writeto(path)
+        self.statusBar().showMessage(f'Saved to {path}.')
 
     def display_image(self, window=True):
         qformat = QtGui.QImage.Format_Indexed8
