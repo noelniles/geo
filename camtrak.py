@@ -15,6 +15,7 @@ from astropy.io import fits
 from geometry import geodetic_to_ecef
 from gui import ClickableScene
 from cameras import Basler
+from cameras import CVWebcam
 from trackers import SingleTracker
 from geometry import inside_circle
 
@@ -34,8 +35,6 @@ class CamTrak(QtWidgets.QMainWindow):
         self.altered_image = None
         self.original_image = None
         self.connect_signals()
-        #self.timer = QtCore.QTimer(self, interval=0.1)
-        #self.timer.timeout.connect(self.update_frame)
         self._image_counter = 0
         self.zoom = 1
 
@@ -276,22 +275,10 @@ class CamTrak(QtWidgets.QMainWindow):
         cv2.circle(self.altered_image, (int(x), int(y)), 10, (0, 0, 255), 1, cv2.LINE_AA)
         cv2.putText(self.altered_image, f'az:{x:.3f}alt:{y:.3f}', (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255))
 
-    #@QtCore.pyqtSlot()
-    #def start_webcam(self):
-    #    """This slot is called when the user clicks the "view" button. It's main
-    #    purpose is to create the camera device.
-    #    """
-    #    self.timer.start()
-    #    if self.camera is None:
-    #        self.camera = cv2.VideoCapture(0)
-    #    self.timer.start()
-
     @QtCore.pyqtSlot()
     def update_frame(self):
         """This is the slot that actaully reads an image from the camera."""
-        #ret, image = self.camera.read()
         image = self.image_queue.get()
-        print('updating frame ', image.shape)
         self.original_image = image
         self.altered_image = image.copy()
 
@@ -522,10 +509,11 @@ if __name__=='__main__':
     import sys
     args = cli()
     app = QtWidgets.QApplication(sys.argv)
+
     if args.camera == 'basler':
         cap = Basler()
     else:
-        cap = cv2.VideoCapture(0)
+        cap = CVWebcam()
 
     window = CamTrak(cap)
     window.show()

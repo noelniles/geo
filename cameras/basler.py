@@ -43,9 +43,6 @@ class Basler(QObject):
                     self.image_queue.put(npimage)
                     self.queue_updated.emit()
 
-                #return True, npimage
-
-        #return False, None
 
     def close():
         camera.StopGrabbing()
