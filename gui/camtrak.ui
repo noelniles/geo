@@ -466,6 +466,30 @@
       </widget>
      </widget>
     </item>
+    <item row="3" column="0">
+     <widget class="QComboBox" name="image_type_box">
+      <item>
+       <property name="text">
+        <string>BMP</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>FITS</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>PNG</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>TIFF</string>
+       </property>
+      </item>
+     </widget>
+    </item>
    </layout>
   </widget>
   <widget class="QMenuBar" name="menubar">

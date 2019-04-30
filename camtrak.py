@@ -10,71 +10,23 @@ import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets, uic
 
 from geometry import geodetic_to_ecef
+from gui import ClickableScene
 from cameras import Basler
+from trackers import SingleTracker
+from geometry import inside_circle
 
 
-class Scene(QtWidgets.QGraphicsScene):
-    image_points_updated = QtCore.pyqtSignal(object)
-
-    def __init__(self, parent=None):
-        super(Scene, self).__init__()
-        self.mode = 'pnp'
-
-    def mouseDoubleClickEvent(self, ev):
-        x = ev.scenePos().x()
-        y = ev.scenePos().y()
-        self.image_points_updated.emit((x, y))
-
-class Tracker:
-    def __init__(self):
-        self.t = cv2.TrackerCSRT_create()
-        self.roi = (0, 0, 0, 0)
-        self.initialized = False
-        self.fgbg = cv2.createBackgroundSubtractorMOG2() 
-
-        self.prepped_image = None
-
-    def prep(self, img):
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-        blur = cv2.bilateralFilter(gray, 9, 75, 75)
-        thresh = cv2.threshold(blur, 200, 255, cv2.THRESH_BINARY)[1]
-        thresh = cv2.erode(thresh, None, iterations=2)
-        thresh = cv2.dilate(thresh, None, iterations=4)
-
-        fgmask = self.fgbg.apply(img, 0.9)
-        fgmask = cv2.morphologyEx(fgmask, cv2.MORPH_CLOSE, kernel, iterations=2)
-
-        self.prepped_image = cv2.cvtColor(fgmask, cv2.COLOR_GRAY2RGB)
-        return blur
-
-    def initialize(self, image, roi):
-        image = self.prep(image)
-        ok = self.t.init(image, roi)
-
-        if not ok:
-            print('problem intializing tracker')
-
-        self.initialized = True
-
-    def update(self, image):
-        image = self.prep(image)
-        ok, self.roi = self.t.update(image)
-
-        if not ok:
-            print('no luck tracking')
-        return self.roi
-        
 class CamTrak(QtWidgets.QMainWindow):
 
     def __init__(self, cap):
         super(CamTrak, self).__init__()
         uic.loadUi('./gui/camtrak.ui',self)
+        self.setWindowIcon(QtGui.QIcon('./assets/icons/radar_icon.png'))
 
         self.camera = cap
-        self.scene = Scene(self.gview)
+        self.scene = ClickableScene(self.gview)
         self.gview.setScene(self.scene)
-        self.mask_scene = Scene(self.mask_view)
+        self.mask_scene = ClickableScene(self.mask_view)
         self.mask_view.setScene(self.mask_scene)
         self.altered_image = None
         self.original_image = None
@@ -98,7 +50,7 @@ class CamTrak(QtWidgets.QMainWindow):
 
         # Different modes.
         self.tracking = False
-        self.tracker = Tracker()
+        self.tracker = SingleTracker()
         self.current_tracked_point = None
 
         # OS stuff
@@ -135,10 +87,12 @@ class CamTrak(QtWidgets.QMainWindow):
 
         self.original_image = cv2.imread(path)
         self.altered_image = self.original_image.copy()
-        print(self.altered_image.shape)
         self.display_image()
 
     def on_save_parameters(self):
+        """Callback function that is called when the Save Parameters btn 
+        is clicked.
+        """
         obj_points = self.get_object_points()
         cam_pos    = self.get_camera_position()
         distortion = self.get_distortion_coeeficients()
@@ -160,6 +114,9 @@ class CamTrak(QtWidgets.QMainWindow):
         self.param_file = fn
 
     def on_load_parameters(self, filename=None):
+        """Callback function that is called when the "Load Parameters" button
+        is called.
+        """
         if filename is None:
             path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Choose a parameter file.", "", "JSON Files (*.json)")
         else:
@@ -199,25 +156,21 @@ class CamTrak(QtWidgets.QMainWindow):
 
         self.statusBar().showMessage(f'Loaded parameters from {self.param_file}')
 
-    def inside_circle(self, point):
-        """This is at least correct and for small list of points not too slow."""
-        index = -1
-
-        for i, p in enumerate(self.known_image_points):
-            x, y = point
-            a, b = p
-            r = 5
-
-            if (x - a)*(x - a) + (y - b)*(y - b) < r*r:
-                return i, True
-            
-        return index, False
-
     def add_tracking_point(self, point):
         self.current_tracked_point = point
 
     def add_pnp_point(self, point, latlonalt):
-        ind, exists = self.inside_circle(point)
+        """This function is called whenever the scene is double clicked 
+        in tracking mode.
+
+        Arguments:
+            point (2-tuple): (x, y) of clicked point
+            latlonalt (3-tuple): the user entered (lat, lon, alt)
+
+        Returns:
+            None
+        """
+        ind, exists = inside_circle(point, self.known_image_points)
             
         if exists:
             # Remove the point if it exists.
@@ -240,7 +193,17 @@ class CamTrak(QtWidgets.QMainWindow):
                     row_pos, 2, QtWidgets.QTableWidgetItem(str(latlonalt[2])))
 
     def add_known_image_points(self, point, latlonalt=None):
-        """Callback function that is called when the scene is clicked."""
+        """Callback function that is called when the scene is clicked. First,
+        we add the point to either the tracking list or the PNP list and then
+        we call draw_known_points at the very end in order to draw the points
+        on the image.
+
+        Arguments:
+            point (2-tuple): (x, y) of clicked point
+
+        Returns:
+            None
+        """
         if self.tracking:
             self.add_tracking_point(point)
         else:
@@ -250,24 +213,31 @@ class CamTrak(QtWidgets.QMainWindow):
         self.draw_known_points()
 
     def draw_known_points(self):
+        """This function draws points onto the visible image. All of the 
+        drawing happens on a copy of the image so the original is maintained.
+        """
         if self.tracking:
             if self.current_tracked_point == None:
                 return
             p = self.current_tracked_point
-            x = int(p[0])
-            y = int(p[1])
+            x, y = (int(u) for u in p)
             cv2.circle(self.altered_image, (x, y), 10, (0, 0, 255), 1, cv2.LINE_AA)
-            cv2.putText(self.altered_image, f'az:{x} alt:{y}', (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1/8, (0, 0, 255))
-            self.statusBar().showMessage(f'az: {x} alt: {y}')
+            cv2.putText(self.altered_image, f'az:{x:.3f} alt:{y:.3f}', (x, y), cv2.FONT_HERSHEY_COMPLEX, 1, (0, 0, 255))
+            self.statusBar().showMessage(f'az: {x:.3f} alt: {y:.3f}')
         else:
             for p in self.known_image_points:
-                x = int(p[0])
-                y = int(p[1])
+                x, y = (int(u) for u in p)
 
                 cv2.circle(self.altered_image, (x, y), 5, (0, 0, 255), 1, cv2.LINE_AA)
-                cv2.putText(self.altered_image, f'x:{x} y:{y}', (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1/8, (0, 0, 255))
+                cv2.putText(self.altered_image, f'x:{x} y:{y}', (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255))
 
     def update_frame_tracking(self):
+        """This function is called when we need to update the scene in tracking
+        mode. If we don't have any points to track we just return, because there
+        is nothing to do. If the tracker isn't initialized then we initialize it
+        If the tracker is initialized we update it and then draw the box on the.
+        scene.
+        """
         if not self.current_tracked_point:
             return
 
@@ -281,17 +251,21 @@ class CamTrak(QtWidgets.QMainWindow):
         x, y, w, h = self.roi
 
         cv2.circle(self.altered_image, (int(x), int(y)), 10, (0, 0, 255), 1, cv2.LINE_AA)
-        cv2.putText(self.altered_image, f'az:{x} alt:{y}', (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1/8, (0, 0, 255))
+        cv2.putText(self.altered_image, f'az:{x:.3f}alt:{y:.3f}', (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255))
 
     @QtCore.pyqtSlot()
     def start_webcam(self):
+        """This slot is called when the user clicks the "view" button. It's main
+        purpose is to create the camera device.
+        """
         self.timer.start()
         if self.camera is None:
-            self.capture = cv2.VideoCapture(0)
+            self.camera = cv2.VideoCapture(0)
         self.timer.start()
 
     @QtCore.pyqtSlot()
     def update_frame(self):
+        """This is the slot that actaully reads an image from the camera."""
         ret, image = self.camera.read()
         self.original_image = image
         self.altered_image = image.copy()
@@ -305,6 +279,7 @@ class CamTrak(QtWidgets.QMainWindow):
 
     @QtCore.pyqtSlot()
     def capture_image(self):
+        """This is the slot that saves an image to a file."""
         img = self.original_image
         path = os.path.join(self.home, 'data')
         name = "camtrak_frame_{}.png".format(self._image_counter) 
