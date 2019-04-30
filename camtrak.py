@@ -28,7 +28,6 @@ class CamTrak(QtWidgets.QMainWindow):
         uic.loadUi('./gui/camtrak.ui',self)
         self.setWindowIcon(QtGui.QIcon('./assets/icons/radar_icon.png'))
 
-        self.image_queue = deque(maxlen=16)
         self.scene = ClickableScene(self.gview)
         self.gview.setScene(self.scene)
         self.mask_scene = ClickableScene(self.mask_view)
@@ -50,10 +49,12 @@ class CamTrak(QtWidgets.QMainWindow):
 
         # Different modes.
         self.tracking = False
+        self.calibrating = False
         self.tracker = SingleTracker()
         self.current_tracked_point = None
 
         # Image save stuff.
+        self.image_queue = deque(maxlen=100)
         self.image_save_type = 'bmp'
         self.image_type_box.currentIndexChanged.connect(self.on_image_type_selection_changed)
         self.metadata_filename = None
@@ -84,6 +85,11 @@ class CamTrak(QtWidgets.QMainWindow):
         msg = 'Tracking Mode' if self.tracking else ''
         self.statusBar().showMessage(msg)
 
+    def on_calibrating_mode(self):
+        self.calibrating = True
+        self.tracking = False
+        self.statusBar().showMessage('Calibrating Mode')
+
     def connect_signals(self):
         self.capture_btn.clicked.connect(self.capture_image)
         self.scene.image_points_updated.connect(self.add_known_image_points)
@@ -91,6 +97,7 @@ class CamTrak(QtWidgets.QMainWindow):
         self.action_save_parameters.triggered.connect(self.on_save_parameters)
         self.action_load_parameters.triggered.connect(self.on_load_parameters)
         self.action_track.triggered.connect(self.on_tracking_mode)
+        self.action_calibrate.triggered.connect(self.on_calibrating_mode)
         self.action_open_image.triggered.connect(self.on_open_image)
 
     def load_previous_session(self):
@@ -275,6 +282,9 @@ class CamTrak(QtWidgets.QMainWindow):
         cv2.circle(self.altered_image, (int(x), int(y)), 10, (0, 0, 255), 1, cv2.LINE_AA)
         cv2.putText(self.altered_image, f'az:{x:.3f}alt:{y:.3f}', (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255))
 
+    def update_frame_calibrating(self):
+        pass
+
     @QtCore.pyqtSlot()
     def update_frame(self):
         """This is the slot that actaully reads an image from the camera."""
@@ -286,6 +296,9 @@ class CamTrak(QtWidgets.QMainWindow):
         if self.tracking:
             self.update_frame_tracking()
             self.display_image(True)
+        elif self.calibrating:
+            self.update_frame_calibrating()
+            self.display_image(True)
         else:
             image = cv2.flip(self.altered_image, 1)
             self.display_image(True)
@@ -294,6 +307,9 @@ class CamTrak(QtWidgets.QMainWindow):
     def capture_image(self):
         """This is the slot that saves an image to a file."""
         ext = self.image_save_type.lower()
+
+        if self.calibrating:
+            print('calibrating')
 
         if ext == 'fits':
             self.save_fits()
@@ -325,7 +341,7 @@ class CamTrak(QtWidgets.QMainWindow):
     def save_fits(self):
         hdu = fits.PrimaryHDU()
 
-        hdu.data = self.original_image[::]
+        hdu.data = self.original_image.astype('float32')
         hdr = hdu.header
 
         if not self.metadata_filename:

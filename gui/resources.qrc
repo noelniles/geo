@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="images">
+    <file>assets/icons/chessboard.png</file>
+    <file>assets/icons/capture_icon.png</file>
+    <file>assets/icons/world_points.png</file>
+  </qresource>
+</RCC>
