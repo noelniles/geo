@@ -53,8 +53,16 @@ class CamTrak(QtWidgets.QMainWindow):
         self.tracker = SingleTracker()
         self.current_tracked_point = None
 
+        # Image save stuff.
+        self.image_save_type = 'BMP'
+        self.image_type_box.currentIndexChanged.connect(self.on_image_type_selection_changed)
+
         # OS stuff
         self.home = os.path.expanduser('~')
+
+    def on_image_type_selection_changed(self, index):
+        self.image_save_type = self.image_type_box.itemText(index)
+        print(f'Saving {self.image_save_type} images')
 
     def on_tracking_mode(self):
         self.tracking = not self.tracking
