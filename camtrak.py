@@ -3,11 +3,13 @@ import argparse
 import hashlib
 import os
 import cv2
+from datetime import datetime
 import json
 from functools import partial
 
 import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets, uic
+from astropy.io import fits
 
 from geometry import geodetic_to_ecef
 from gui import ClickableScene
@@ -45,23 +47,26 @@ class CamTrak(QtWidgets.QMainWindow):
 
         self.param_file = None
 
-        # Load the last session.
-        self.load_previous_session()
-
         # Different modes.
         self.tracking = False
         self.tracker = SingleTracker()
         self.current_tracked_point = None
 
         # Image save stuff.
-        self.image_save_type = 'BMP'
+        self.image_save_type = 'bmp'
         self.image_type_box.currentIndexChanged.connect(self.on_image_type_selection_changed)
+        self.metadata_filename = None
+        self.save_directory = None
+        self.starting_time = datetime.utcnow().isoformat().replace(':', "_")
 
         # OS stuff
         self.home = os.path.expanduser('~')
 
+        # Finally, load the last session if there is one.
+        self.load_previous_session()
+
     def on_image_type_selection_changed(self, index):
-        self.image_save_type = self.image_type_box.itemText(index)
+        self.image_save_type = self.image_type_box.itemText(index).lower()
         print(f'Saving {self.image_save_type} images')
 
     def on_tracking_mode(self):
@@ -288,15 +293,51 @@ class CamTrak(QtWidgets.QMainWindow):
     @QtCore.pyqtSlot()
     def capture_image(self):
         """This is the slot that saves an image to a file."""
-        img = self.original_image
-        path = os.path.join(self.home, 'data')
-        name = "camtrak_frame_{}.png".format(self._image_counter) 
-        fn = os.path.join(path, name)
-        cv2.imwrite(fn, img)
+        ext = self.image_save_type.lower()
 
-        QtWidgets.QApplication.beep()
-        self.statusBar().showMessage(f'Saved image to {fn}')
-        self._image_counter += 1
+        if ext == 'fits':
+            self.save_fits()
+            self._image_counter += 1
+        else:
+            img = self.original_image
+            path = os.path.join(self.home, 'data')
+            name = "camtrak_frame_{}.png".format(self._image_counter) 
+            fn = os.path.join(path, name)
+            cv2.imwrite(fn, img)
+
+            QtWidgets.QApplication.beep()
+            self.statusBar().showMessage(f'Saved image to {fn}')
+            self._image_counter += 1
+
+    def user_create_fits_header(self):
+        pass
+
+    def save_fits(self):
+        hdu = fits.PrimaryHDU()
+
+        hdu.data = self.original_image[::]
+        hdr = hdu.header
+
+        if not self.metadata_filename:
+            # Let the user choose a JSON file containing fits header.
+            self.metadata_filename, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Choose a FITS header file.", "", "JSON Files (*.json)")
+            self.user_create_fits_header()
+            
+        if self.metadata_filename:
+            # A metadata file exists so load it into a dict that will become the header.
+            with open(self.metadata_filename, 'r') as f:
+                d = json.load(f)
+
+        if not self.save_directory:
+            self.save_directory, _ = QtWidgets.QFileDialog.getExistingDirectory(self, "Select a directory")
+
+
+        directory = os.path.join(self.save_directory, self.starting_time)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        path = os.path.join(directory, f'{self.image_counter}.fits')
+        hdu.writeto(path)
 
     def display_image(self, window=True):
         qformat = QtGui.QImage.Format_Indexed8
