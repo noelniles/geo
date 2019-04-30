@@ -6,6 +6,7 @@ import cv2
 from datetime import datetime
 import json
 from functools import partial
+from queue import Queue
 
 import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets, uic
@@ -25,7 +26,7 @@ class CamTrak(QtWidgets.QMainWindow):
         uic.loadUi('./gui/camtrak.ui',self)
         self.setWindowIcon(QtGui.QIcon('./assets/icons/radar_icon.png'))
 
-        self.camera = cap
+        self.image_queue = Queue()
         self.scene = ClickableScene(self.gview)
         self.gview.setScene(self.scene)
         self.mask_scene = ClickableScene(self.mask_view)
@@ -33,8 +34,8 @@ class CamTrak(QtWidgets.QMainWindow):
         self.altered_image = None
         self.original_image = None
         self.connect_signals()
-        self.timer = QtCore.QTimer(self, interval=0.1)
-        self.timer.timeout.connect(self.update_frame)
+        #self.timer = QtCore.QTimer(self, interval=0.1)
+        #self.timer.timeout.connect(self.update_frame)
         self._image_counter = 0
         self.zoom = 1
 
@@ -61,6 +62,13 @@ class CamTrak(QtWidgets.QMainWindow):
 
         # OS stuff
         self.home = os.path.expanduser('~')
+
+        # Set up the camera stuff.
+        self.camera = cap
+        self.camera_thread = QtCore.QThread()
+        self.camera.moveToThread(self.camera_thread)
+        self.camera.queue_updated.connect(self.update_frame)
+        self.camera_thread.start()
 
         # Finally, load the last session if there is one.
         self.load_previous_session()
@@ -279,7 +287,8 @@ class CamTrak(QtWidgets.QMainWindow):
     @QtCore.pyqtSlot()
     def update_frame(self):
         """This is the slot that actaully reads an image from the camera."""
-        ret, image = self.camera.read()
+        #ret, image = self.camera.read()
+        image = self.image_queue.pop()
         self.original_image = image
         self.altered_image = image.copy()
 

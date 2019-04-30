@@ -1,8 +1,14 @@
+from PyQt5.QtCore import pyqtSignal, QObject
 from pypylon import pylon
 
 
-class Basler:
+class Basler(QObject):
+    # This signal is called whenever a new image is added to the queue. It is the
+    # signal for the gui thread to do a pop from the queue.
+    queue_updated = pyqtSignal()
+
     def __init__(self):
+        self.has_queue = False
         self.camera = pylon.InstantCamera(pylon.TlFactory.GetInstance().CreateFirstDevice())
         self.camera.Open()
         self.isopened = True
@@ -18,6 +24,11 @@ class Basler:
     def isOpened(self):
         return self.isopened
 
+    def add_queue(self, queue):
+        """This method must be called before the camera starts reading."""
+        self.image_queue = queue
+        self.has_queue = True
+
     def read(self):
         if self.camera.IsGrabbing():
             grabResult = self.camera.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
@@ -27,9 +38,16 @@ class Basler:
                 image = self.converter.Convert(grabResult)
                 npimage = image.GetArray()
                 
-                return True, npimage
+                if not self.image_queue.full():
+                    self.image_queue.put(npimage)
+                    self.queue_updated.emit()
 
-        return False, None
+                #return True, npimage
+
+        #return False, None
+
+    def start(self):
+        
 
     def close():
         camera.StopGrabbing()
