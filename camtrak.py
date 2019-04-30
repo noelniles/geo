@@ -65,9 +65,11 @@ class CamTrak(QtWidgets.QMainWindow):
 
         # Set up the camera stuff.
         self.camera = cap
+        self.camera.add_queue(self.image_queue)
         self.camera_thread = QtCore.QThread()
         self.camera.moveToThread(self.camera_thread)
         self.camera.queue_updated.connect(self.update_frame)
+        self.camera_thread.started.connect(self.camera.grab)
         self.camera_thread.start()
 
         # Finally, load the last session if there is one.
@@ -83,7 +85,7 @@ class CamTrak(QtWidgets.QMainWindow):
         self.statusBar().showMessage(msg)
 
     def connect_signals(self):
-        self.view_btn.clicked.connect(self.start_webcam)
+        #self.view_btn.clicked.connect(self.start_webcam)
         self.capture_btn.clicked.connect(self.capture_image)
         self.scene.image_points_updated.connect(self.add_known_image_points)
         self.solve_pnp_btn.clicked.connect(self.solve_pnp)
@@ -274,21 +276,22 @@ class CamTrak(QtWidgets.QMainWindow):
         cv2.circle(self.altered_image, (int(x), int(y)), 10, (0, 0, 255), 1, cv2.LINE_AA)
         cv2.putText(self.altered_image, f'az:{x:.3f}alt:{y:.3f}', (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255))
 
-    @QtCore.pyqtSlot()
-    def start_webcam(self):
-        """This slot is called when the user clicks the "view" button. It's main
-        purpose is to create the camera device.
-        """
-        self.timer.start()
-        if self.camera is None:
-            self.camera = cv2.VideoCapture(0)
-        self.timer.start()
+    #@QtCore.pyqtSlot()
+    #def start_webcam(self):
+    #    """This slot is called when the user clicks the "view" button. It's main
+    #    purpose is to create the camera device.
+    #    """
+    #    self.timer.start()
+    #    if self.camera is None:
+    #        self.camera = cv2.VideoCapture(0)
+    #    self.timer.start()
 
     @QtCore.pyqtSlot()
     def update_frame(self):
         """This is the slot that actaully reads an image from the camera."""
         #ret, image = self.camera.read()
-        image = self.image_queue.pop()
+        image = self.image_queue.get()
+        print('updating frame ', image.shape)
         self.original_image = image
         self.altered_image = image.copy()
 

@@ -8,6 +8,7 @@ class Basler(QObject):
     queue_updated = pyqtSignal()
 
     def __init__(self):
+        super(Basler, self).__init__()
         self.has_queue = False
         self.camera = pylon.InstantCamera(pylon.TlFactory.GetInstance().CreateFirstDevice())
         self.camera.Open()
@@ -29,8 +30,8 @@ class Basler(QObject):
         self.image_queue = queue
         self.has_queue = True
 
-    def read(self):
-        if self.camera.IsGrabbing():
+    def grab(self):
+        while self.camera.IsGrabbing():
             grabResult = self.camera.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
 
             if grabResult.GrabSucceeded():
@@ -45,9 +46,6 @@ class Basler(QObject):
                 #return True, npimage
 
         #return False, None
-
-    def start(self):
-        
 
     def close():
         camera.StopGrabbing()
