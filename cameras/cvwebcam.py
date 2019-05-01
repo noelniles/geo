@@ -1,3 +1,5 @@
+import time
+
 import cv2
 from PyQt5.QtCore import pyqtSignal, QObject
 from pypylon import pylon
@@ -29,6 +31,8 @@ class CVWebcam(QObject):
             if ok:
                 self.image_queue.append(img)
                 self.queue_updated.emit()
+                #time.sleep(0.0001)
+
 
 
     def close():

@@ -1,18 +1,21 @@
 #! /usr/bin/env python
 import argparse
 import hashlib
+import json
 import os
 import cv2
+import socket
 from datetime import datetime
-import json
 from functools import partial
-#from queue import Queue
 from collections import deque
 
 import numpy as np
+import line_profiler
 from PyQt5 import QtCore, QtGui, QtWidgets, uic
 from astropy.io import fits
 
+
+from eps901 import PointingMsg, time_since_midnight, EPS901_MSG_ID
 from geometry import geodetic_to_ecef
 from gui import ClickableScene
 from gui import Ui_MainWindow
@@ -23,6 +26,7 @@ from geometry import inside_circle
 
 
 class CamTrak(QtWidgets.QMainWindow, Ui_MainWindow):
+    camera_thread = QtCore.QThread()
 
     def __init__(self, cap):
         super(CamTrak, self).__init__()
@@ -69,11 +73,13 @@ class CamTrak(QtWidgets.QMainWindow, Ui_MainWindow):
         # Set up the camera stuff.
         self.camera = cap
         self.camera.add_queue(self.image_queue)
-        self.camera_thread = QtCore.QThread()
         self.camera.moveToThread(self.camera_thread)
         self.camera.queue_updated.connect(self.update_frame)
         self.camera_thread.started.connect(self.camera.grab)
         self.camera_thread.start()
+
+        # Set up the network stuff.
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         # Finally, load the last session if there is one.
         self.load_previous_session()
@@ -262,6 +268,21 @@ class CamTrak(QtWidgets.QMainWindow, Ui_MainWindow):
                 cv2.circle(self.altered_image, (x, y), 5, (0, 0, 255), 1, cv2.LINE_AA)
                 cv2.putText(self.altered_image, f'x:{x} y:{y}', (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255))
 
+    def send_pointing_message(self, az=0, el=0):
+        now         = int(time_since_midnight())
+        pm          = PointingMsg()
+        pm.msg_id   = EPS901_MSG_ID
+        pm.track_id = 0xdead
+        pm.cmd      = 0xfa
+        pm.az       = az
+        pm.el       = el
+        pm.follow   = 1
+        pm.ts       = now
+        pm.spare    = 0
+
+        #msg = pickle.dumps(pm)
+        self.sock.sendto(pm, ('localhost', 10000))
+
     def update_frame_tracking(self):
         """This function is called when we need to update the scene in tracking
         mode. If we don't have any points to track we just return, because there
@@ -280,6 +301,7 @@ class CamTrak(QtWidgets.QMainWindow, Ui_MainWindow):
 
         self.roi = self.tracker.update(self.original_image)
         x, y, w, h = self.roi
+        self.send_pointing_message(az=int(x), el=int(y))
 
         cv2.circle(self.altered_image, (int(x), int(y)), 10, (0, 0, 255), 1, cv2.LINE_AA)
         cv2.putText(self.altered_image, f'az:{x:.3f}alt:{y:.3f}', (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255))
@@ -341,6 +363,10 @@ class CamTrak(QtWidgets.QMainWindow, Ui_MainWindow):
         return path
 
     def save_fits(self):
+        """Save the current image to a FITS file. This should prompt the user
+        to create a JSON file containing a FITS header if one isn't already in 
+        use. This FITS header will be reused during the current  session.
+        """
         hdu = fits.PrimaryHDU()
 
         hdu.data = self.original_image.astype('float32')
@@ -545,7 +571,8 @@ def cli():
 
     return ap.parse_args()
 
-if __name__=='__main__':
+@profile
+def main():
     import sys
     args = cli()
     app = QtWidgets.QApplication(sys.argv)
@@ -558,3 +585,6 @@ if __name__=='__main__':
     window = CamTrak(cap)
     window.show()
     sys.exit(app.exec_())
+
+if __name__=='__main__':
+    main()
