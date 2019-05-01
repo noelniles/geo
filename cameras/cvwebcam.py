@@ -27,7 +27,7 @@ class CVWebcam(QObject):
             ok, img = self.camera.read()
 
             if ok:
-                self.image_queue.apppend(img)
+                self.image_queue.append(img)
                 self.queue_updated.emit()
 
 

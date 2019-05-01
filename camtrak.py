@@ -15,17 +15,19 @@ from astropy.io import fits
 
 from geometry import geodetic_to_ecef
 from gui import ClickableScene
+from gui import Ui_MainWindow
 from cameras import Basler
 from cameras import CVWebcam
 from trackers import SingleTracker
 from geometry import inside_circle
 
 
-class CamTrak(QtWidgets.QMainWindow):
+class CamTrak(QtWidgets.QMainWindow, Ui_MainWindow):
 
     def __init__(self, cap):
         super(CamTrak, self).__init__()
-        uic.loadUi('./gui/camtrak.ui',self)
+        #uic.loadUi('./gui/camtrak.ui',self)
+        self.setupUi(self)
         self.setWindowIcon(QtGui.QIcon('./assets/icons/radar_icon.png'))
 
         self.scene = ClickableScene(self.gview)
