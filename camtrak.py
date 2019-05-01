@@ -557,6 +557,7 @@ class CamTrak(QtWidgets.QMainWindow, Ui_MainWindow):
 
     def closeEvent(self, ev):
         session = {}
+
         if self.param_file:
             session.update({'param file': self.param_file})
 
@@ -571,7 +572,6 @@ def cli():
 
     return ap.parse_args()
 
-@profile
 def main():
     import sys
     args = cli()
@@ -584,7 +584,11 @@ def main():
 
     window = CamTrak(cap)
     window.show()
-    sys.exit(app.exec_())
+
+    rc = app.exec_()
+    del window
+    del app
+    sys.exit(rc)
 
 if __name__=='__main__':
     main()
