@@ -60,7 +60,7 @@ class CamTrak(QtWidgets.QMainWindow, Ui_MainWindow):
         self.current_tracked_point = None
 
         # Image save stuff.
-        self.image_queue = deque(maxlen=100)
+        self.image_queue = deque(maxlen=8)
         self.image_save_type = 'bmp'
         self.image_type_box.currentIndexChanged.connect(self.on_image_type_selection_changed)
         self.metadata_filename = None
