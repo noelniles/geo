@@ -51,8 +51,8 @@
         <rect>
          <x>10</x>
          <y>30</y>
-         <width>221</width>
-         <height>201</height>
+         <width>381</width>
+         <height>121</height>
         </rect>
        </property>
        <property name="sizePolicy">
@@ -60,6 +60,9 @@
          <horstretch>0</horstretch>
          <verstretch>0</verstretch>
         </sizepolicy>
+       </property>
+       <property name="verticalScrollBarPolicy">
+        <enum>Qt::ScrollBarAlwaysOn</enum>
        </property>
       </widget>
      </widget>

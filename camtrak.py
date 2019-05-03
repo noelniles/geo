@@ -56,6 +56,7 @@ class CamTrak(QtWidgets.QMainWindow, Ui_MainWindow):
         # Different modes.
         self.tracking = False
         self.calibrating = False
+        self.still_image = False
         self.tracker = SingleTracker()
         self.current_tracked_point = None
 
@@ -309,6 +310,42 @@ class CamTrak(QtWidgets.QMainWindow, Ui_MainWindow):
     def update_frame_calibrating(self):
         pass
 
+    def update_frame_solving(self):
+        pass
+
+    def display_image(self, window=True):
+        qformat = QtGui.QImage.Format_Indexed8
+        img = self.altered_image
+
+        if len(img.shape) == 3 :
+            if img.shape[2] == 4:
+                qformat = QtGui.QImage.Format_RGBA8888
+            else:
+                qformat = QtGui.QImage.Format_RGB888
+
+        w, h = img.shape[:2]
+
+        self.draw_known_points()
+
+        out_img = QtGui.QImage(img, h, w, img.strides[0], qformat)
+        out_img = out_img.rgbSwapped()
+
+        if window:
+            self.gview.setTransform(QtGui.QTransform().scale(self.zoom, self.zoom))
+            self.scene.addPixmap(QtGui.QPixmap.fromImage(out_img))
+
+            if self.tracking:
+                # This is to show the image mask after the preparation that is
+                # done inside the tracker. But the tracker might not have an 
+                # image yet so we need to wait until it does. 
+                if not self.current_tracked_point:
+                    return
+                mask = self.tracker.prepped_image
+                qmask = QtGui.QImage(mask, h, w, mask.strides[0], qformat)
+                qmask = qmask.rgbSwapped()
+                self.mask_view.setTransform(QtGui.QTransform().scale(self.zoom, self.zoom))
+                self.mask_scene.addPixmap(QtGui.QPixmap.fromImage(qmask))
+
     @QtCore.pyqtSlot()
     def update_frame(self):
         """This is the slot that actaully reads an image from the camera."""
@@ -404,44 +441,12 @@ class CamTrak(QtWidgets.QMainWindow, Ui_MainWindow):
         hdu.writeto(path)
         self.statusBar().showMessage(f'Saved to {path}.')
 
-    def display_image(self, window=True):
-        qformat = QtGui.QImage.Format_Indexed8
-        img = self.altered_image
-
-        if len(img.shape) == 3 :
-            if img.shape[2] == 4:
-                qformat = QtGui.QImage.Format_RGBA8888
-            else:
-                qformat = QtGui.QImage.Format_RGB888
-
-        w, h = img.shape[:2]
-
-        self.draw_known_points()
-
-        out_img = QtGui.QImage(img, h, w, img.strides[0], qformat)
-        out_img = out_img.rgbSwapped()
-
-        if window:
-            self.gview.setTransform(QtGui.QTransform().scale(self.zoom, self.zoom))
-            self.scene.addPixmap(QtGui.QPixmap.fromImage(out_img))
-
-            if self.tracking:
-                # This is to show the image mask after the preparation that is
-                # done inside the tracker. But the tracker might not have an 
-                # image yet so we need to wait until it does. 
-                if not self.current_tracked_point:
-                    return
-                mask = self.tracker.prepped_image
-                qmask = QtGui.QImage(mask, h, w, mask.strides[0], qformat)
-                qmask = qmask.rgbSwapped()
-                self.mask_view.setTransform(QtGui.QTransform().scale(self.zoom, self.zoom))
-                self.mask_scene.addPixmap(QtGui.QPixmap.fromImage(qmask))
 
     def get_object_points(self):
         obj_points = []
 
         print('row count: ', self.known_geo_points_tbl.rowCount())
-        for i in range(1, self.known_geo_points_tbl.rowCount()):
+        for i in range(0, self.known_geo_points_tbl.rowCount()):
             lat = float(self.known_geo_points_tbl.item(i, 0).text())
             lon = float(self.known_geo_points_tbl.item(i, 1).text())
             alt = float(self.known_geo_points_tbl.item(i, 2).text())
@@ -452,8 +457,8 @@ class CamTrak(QtWidgets.QMainWindow, Ui_MainWindow):
                 "lat": lat,
                 "lon": lon,
                 "alt": alt,
-                "x": x,
-                "y": y
+                "x": float(x),
+                "y": float(y)
             }
             obj_points.append(pos)
 
@@ -525,12 +530,15 @@ class CamTrak(QtWidgets.QMainWindow, Ui_MainWindow):
         
         # Now get the 2d image points.
         img_points = self.known_image_points
-        print(obj_points)
-        print(img_points)
+        print('object points: ', obj_points)
+        print('image points: ', llas)
 
-        sol = cv2.solvePnP(np.array(llas), np.asarray(img_points, 'float32'), cam_mat, dist_coeffs)
+        ok, self.rvec, self.tvec = cv2.solvePnP(np.array(llas), np.asarray(img_points, 'float32'), cam_mat, dist_coeffs)
+        print('rvec: ', self.rvec)
+        print('tvec: ', self.tvec)
 
-        print(sol)
+
+
 
     def zoom_in(self):
         self.zoom *= 1.05
