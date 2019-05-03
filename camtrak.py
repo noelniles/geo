@@ -349,6 +349,7 @@ class CamTrak(QtWidgets.QMainWindow, Ui_MainWindow):
     @QtCore.pyqtSlot()
     def update_frame(self):
         """This is the slot that actaully reads an image from the camera."""
+        if not self.image_queue: return
         image = self.image_queue.pop()
         self.image_queue.rotate(-1)
         self.original_image = image
