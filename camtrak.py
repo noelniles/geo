@@ -538,9 +538,6 @@ class CamTrak(QtWidgets.QMainWindow, Ui_MainWindow):
         print('rvec: ', self.rvec)
         print('tvec: ', self.tvec)
 
-
-
-
     def zoom_in(self):
         self.zoom *= 1.05
         self.display_image()
